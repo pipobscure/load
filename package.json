@@ -1,0 +1,28 @@
+{
+	"name": "@pipobscure/load",
+	"version": "0.0.0",
+	"description": "ESM/CJS Module Loader",
+	"main": "dist/init.js",
+	"type": "module",
+	"exports": {
+		".": "./dist/loader.js",
+		"./main": "./dist/main.js",
+		"./run": "./dist/init.js"
+	},
+	"scripts": {
+		"test": "node --test dist/",
+		"build": "tsc",
+		"format": "biome format --write *.json src/",
+		"lint": "biome lint --write *.json src/"
+	},
+	"keywords": ["ESM", "CJS", "Module", "Load"],
+	"author": "Philipp Dunkel <pip@pipobscure.com>",
+	"license": "ISC",
+	"devDependencies": {
+		"@types/node": "^22.9.0",
+		"typescript": "^5.6.3"
+	},
+	"dependencies": {
+		"@pipobscure/zip": "^1.0.0"
+	}
+}

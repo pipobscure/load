@@ -1,0 +1,31 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "NodeNext",
+		"declaration": true,
+		"declarationMap": false,
+		"sourceMap": true,
+		"composite": false,
+		"incremental": true,
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"strictFunctionTypes": true,
+		"strictBindCallApply": true,
+		"strictPropertyInitialization": true,
+		"noImplicitThis": true,
+		"alwaysStrict": true,
+		"noUnusedParameters": true,
+		"noUnusedLocals": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"baseUrl": "./",
+		"paths": {},
+		"esModuleInterop": false,
+		"noEmit": false,
+		"resolveJsonModule": false,
+		"outDir": "dist/"
+	},
+	"include": ["src"],
+	"exclude": ["node_modules/**"]
+}
