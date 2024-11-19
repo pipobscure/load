@@ -5,7 +5,7 @@ Module.runMain = function () {
 	return runMain.call(this, `${__dirname}/main.js`);
 };
 
-register('@pipobscure/loader/run', import.meta.url);
+register(import.meta.url);
 
 type Context = {
 	conditions: string[];

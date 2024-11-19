@@ -18,7 +18,6 @@ export class Loader {
 	constructor(archive: ReadMap<Buffer> & { file(name: string): string }, name?: string) {
 		this.#name = name || 'modules';
 		this.#archive = archive;
-		this.linker = this.linker.bind(this);
 	}
 	resolve(specifier: string, parent?: string): string {
 		if (parent && specifier === '<archive>') {
@@ -72,7 +71,7 @@ export class Loader {
 		return buffer;
 	}
 	#cache: Map<string, VM.Module> = new Map();
-	create(identifier: string) {
+	#create(identifier: string) {
 		if (this.#cache.has(identifier)) return this.#cache.get(identifier) as VM.Module;
 		if (identifier[identifier.length - 1] === '/') {
 			// this is a package
@@ -105,27 +104,40 @@ export class Loader {
 		this.#cache.set(identifier, module);
 		return module;
 	}
-	link(module: VM.Module) {
-		const result = module.link(this.linker);
-		return result;
-	}
-	linker(specifier: string, parent?: VM.Module): VM.Module {
-		const identifier = this.resolve(specifier, parent?.identifier ?? `archive://${this.#name}/`);
-		const module = this.create(identifier);
+	#imports: Record<string, Record<string, VM.Module>> = {};
+	create(identifier: string) {
+		if (this.#cache.has(identifier)) return this.#cache.get(identifier) as VM.Module;
+		const module = this.#create(identifier);
+		this.#imports[identifier] = {};
+		//@ts-ignore
+		for (const specifier of module.importSpecifiers) {
+			const dependency = this.resolve(specifier, module.identifier);
+			this.#imports[identifier][specifier] = this.create(dependency);
+		}
 		return module;
+	}
+	#linking: Set<VM.Module> = new Set();
+	link(module: VM.Module) {
+		if (['linked', 'linking', 'evaluting', 'evaluated'].includes(module.status)) return;
+		if (this.#linking.has(module)) return;
+		this.#linking.add(module);
+		const dependencies = this.#imports[module.identifier];
+		for (const depend of Object.values(dependencies)) this.link(depend);
+		//@ts-ignore
+		module.link(dependencies);
 	}
 	#builtin(identifier: string): VM.Module {
 		const exports = process.getBuiltinModule(identifier);
-		const module = new VM.SyntheticModule(
-			['default', ...Object.keys(exports as object)],
-			function () {
+		//@ts-ignore
+		const module = new VM.Module(identifier, {
+			exportedNames: ['default', ...Object.keys(exports as object)],
+			evaluationSterps: function () {
 				this.setExport('default', exports);
 				for (const exp of Object.keys(exports as object)) {
 					this.setExport(exp, (exports as Record<string, unknown>)[exp]);
 				}
 			},
-			{ identifier },
-		);
+		});
 		return module;
 	}
 	#pkg(identifier: string): VM.Module {
@@ -138,14 +150,15 @@ export class Loader {
 		const source = findEntry(pkgJsonUrl, pkgJson, expName);
 		if (!source) throw new Error(`failed to load ${identifier} no valid entry`);
 		const entrymodule = this.create(this.resolve(source, identifier));
-		entrymodule.link(this.linker);
+		this.link(entrymodule);
 		const lines = Object.keys(entrymodule.namespace).map((name) => {
 			if (name === 'default') {
 				return `import _ from '${source}'; export default _;`;
 			}
 			return `export ${name} from '${source}';`;
 		});
-		const module = new VM.SourceTextModule(lines.join('\n'), { identifier });
+		//@ts-ignore
+		const module = new VM.Module(identifier, lines.join('\n'));
 		this.#cache.set(identifier, module);
 		return module;
 	}
@@ -153,9 +166,10 @@ export class Loader {
 		if (!code) throw new Error(`failed to laod ${identifier}`);
 		//@ts-ignore
 		const { exports = [], reexports = [] }: { exports: string[]; reexports: string[] } = Module.getCJSParser()(code);
-		const module = new VM.SyntheticModule(
-			['default', ...exports, ...reexports],
-			() => {
+		//@ts-ignore
+		const module = new VM.Module(identifier, {
+			exportedNames: ['default', ...exports, ...reexports],
+			evaluationSteps: function () {
 				const func = VM.compileFunction(code, ['require', 'module', 'exports', '__dirname', '__filename']);
 				const exports = {};
 				const mod = { exports };
@@ -191,18 +205,21 @@ export class Loader {
 					dirname,
 					identifier,
 				);
-				module.setExport('default', mod.exports);
+				this.setExport('default', mod.exports);
 			},
-			{ identifier },
-		);
+		});
 		return module;
 	}
 	#mjs(identifier: string, code: string = this.loadContent(identifier)?.toString('utf-8')): VM.Module {
 		if (!code) throw new Error(`failed to laod ${identifier}`);
-		const module = new VM.SourceTextModule(code, {
-			identifier,
-			importModuleDynamically: (specifier): VM.Module => {
-				return this.linker(specifier, module);
+		//@ts-expect-error
+		const module = new VM.Module(identifier, code, {
+			importModuleDynamically: async (specifier: string): Promise<VM.Module> => {
+				const identifier = this.resolve(specifier, module.identifier);
+				const depend = this.create(identifier);
+				this.link(depend);
+				await depend.evaluate();
+				return depend;
 			},
 		});
 		return module;
@@ -231,16 +248,16 @@ export class Loader {
 		const path = this.#archive.file(this.#archiveName(identifier));
 		const mod = { exports: {} as Record<string, unknown> };
 		process.dlopen(mod, path);
-		const module = new VM.SyntheticModule(
-			['default', ...Object.keys(mod.exports)],
-			function () {
+		//@ts-ignore
+		const module = new VM.Module(identifier, {
+			exportedNames: ['default', ...Object.keys(mod.exports)],
+			evaluationSteps: function () {
 				this.setExport('default', mod.exports);
 				for (const exp of Object.keys(mod.exports)) {
 					this.setExport(exp, mod.exports[exp]);
 				}
 			},
-			{ identifier },
-		);
+		});
 		return module;
 	}
 	#filemap(identifier: string) {
@@ -257,39 +274,32 @@ export class Loader {
 			const name = this.#archiveName(url.toString());
 			return this.#archive.get(name);
 		};
-		const module = new VM.SyntheticModule(
-			['has', 'get'],
-			function () {
+		//@ts-ignore
+		const module = new VM.Module(identifier, {
+			exportedNames: ['has', 'get'],
+			evaluationSteps: function () {
 				this.setExport('has', has);
 				this.setExport('get', get);
 			},
-			{ identifier },
-		);
+		});
 		return module;
 	}
 	#fail(identifier: string): VM.Module {
 		throw new Error(`cannot load ${identifier}`);
 	}
-	run() {
-		const main = this.linker(`archive://${this.#name}/`);
-		const linked = call((module: VM.Module) => module.link(this.linker), [main]);
-		const evaluated = call((module: VM.Module) => module.evaluate(), [main], [linked]);
-		const done = call(
-			(module: VM.Module) => {
-				const ns = module.namespace;
-				if ('default' in ns && 'function' === typeof ns.default) {
-					try {
-						return ns.default(process.argv) ?? 0;
-					} catch (ex) {
-						console.error(ex);
-						return process.exitCode ?? -1;
-					}
-				}
-			},
-			[main],
-			[evaluated],
-		);
-		return done;
+	async run() {
+		try {
+			const main = this.create(`archive://${this.#name}/`);
+			this.link(main);
+			await main.evaluate();
+			const ns = main.namespace;
+			if (!('default' in ns)) return 0;
+			if ('function' !== typeof ns.default) return 0;
+			return (await ns.default(...process.argv)) ?? 0;
+		} catch (ex) {
+			console.error(ex);
+			return process.exitCode ?? -1;
+		}
 	}
 	package(file: string) {
 		if (!('seen' in this.#archive)) return;
@@ -323,22 +333,6 @@ export class Loader {
 	static fromPath(path: string) {
 		return new Loader(addRecordingCapability(new FSMap(PATH.resolve(path))), PATH.basename(PATH.resolve(path)));
 	}
-}
-
-function call<X, P extends X | Promise<X>, Y, Q extends Y | Promise<Y>, V>(
-	fun: (...args: X[]) => V | Promise<V>,
-	pargs: P[] = [],
-	extra: Q[] = [],
-): V | Promise<V> {
-	const async = !!pargs.find((arg) => {
-		if (!arg || 'object' !== typeof arg) return false;
-		if (!('then' in arg)) return false;
-		return 'function' === typeof arg.then;
-	});
-	if (async) {
-		return Promise.all([...pargs, ...extra]).then((args) => fun.apply(null, args.slice(0, pargs.length) as X[]));
-	}
-	return fun.apply(null, pargs as X[]);
 }
 
 function findPKG(archive: ReadMap<any>, base: URL, pkgname: string, expname = ''): string {
