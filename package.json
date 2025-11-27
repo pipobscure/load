@@ -1,0 +1,41 @@
+{
+	"name": "@pipobscure/load",
+	"version": "0.0.0",
+	"description": "Archive Node Loaders",
+	"keywords": [],
+	"license": "EUPL-1.2",
+	"author": "Philipp Dunkel <pip@pipobscure.com>",
+	"type": "module",
+	"exports": "./src/loader.js",
+	"files": [
+		"src/*.js",
+		"src/*.d.ts"
+	],
+	"bin": {
+		"inject": "./src/inject.js"
+	},
+	"scripts": {
+		"test": "exit 0",
+		"check": "biome check --write",
+		"build": "tsc --build && rollup -c ./rollup.js",
+		"clean": "rm -f src/*.js src/*.d.ts && git checkout src/postject.d.ts",
+		"postversion": "git push --follow-tags"
+	},
+	"devDependencies": {
+		"@pipobscure/biome": "^1.1.2",
+		"@rollup/plugin-node-resolve": "^16.0.3",
+		"@rollup/plugin-typescript": "^12.3.0",
+		"@types/node": "^24.5.2",
+		"postject": "^1.0.0-alpha.6",
+		"rollup": "^4.53.3",
+		"tslib": "^2.8.1",
+		"typescript": "^5.9.2"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/pipobscure/load"
+	},
+	"dependencies": {
+		"@pipobscure/zip": "^2.0.3"
+	}
+}

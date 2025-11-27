@@ -1,0 +1,7 @@
+.vscode/
+node_modules/
+*.js
+*.d.ts
+*.tsbuildinfo
+*.zip
+!src/postject.d.ts

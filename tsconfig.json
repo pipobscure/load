@@ -1,0 +1,18 @@
+{
+	// Visit https://aka.ms/tsconfig to read more about this file
+	"compilerOptions": {
+		"module": "nodenext",
+		"target": "esnext",
+		"rewriteRelativeImportExtensions": true,
+		"sourceMap": false,
+		"declaration": true,
+		"declarationMap": false,
+		"exactOptionalPropertyTypes": false,
+		"strict": true,
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"noUncheckedSideEffectImports": true,
+		"moduleDetection": "force",
+		"skipLibCheck": true
+	}
+}
