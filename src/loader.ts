@@ -207,6 +207,12 @@ registerHooks({ resolve, load });
 if (SEA.isSea()) {
 	const entry = SEA.getAssetKeys().shift();
 	process.argv[1] = entry ? `asset:${entry}` : '';
+	if (entry) {
+		process.argv[1] = entry;
+	} else {
+		process.argv.splice(1, 1);
+		if (process.argv[1]) process.argv[1] = Path.resolve(process.argv[1]);
+	}
 } else if (archive) {
 	process.on('beforeExit', () => {
 		if (!main) {
